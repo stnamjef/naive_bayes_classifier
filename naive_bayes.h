@@ -2,6 +2,7 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
+#include <algorithm>
 #include <Eigen/Dense>
 #include "Stats.h"
 using namespace std;
@@ -22,9 +23,11 @@ public:
 
 namespace gnb
 {
-	void to_groups(const VectorXd& vec, vector<vector<int>>& groups);
+	int n_classes(const VectorXd& Y);
 
-	void split_by_class(const MatrixXd& X, vector<vector<int>>& groups, MatrixXd*& xs);
+	vector<MatrixXd> split_by_class(const MatrixXd& X, const VectorXd& Y);
+
+	vector<vector<int>> to_groups(const VectorXd& Y);
 }
 
 GaussianNB::GaussianNB() : K(0), MUs(nullptr), sigmas(nullptr) {}
@@ -37,46 +40,45 @@ GaussianNB::~GaussianNB()
 
 void GaussianNB::fit(const MatrixXd& X, const VectorXd& Y)
 {
-	vector<vector<int>> groups;
-	gnb::to_groups(Y, groups);
-
-	K = (int)groups.size();
-
+	K = gnb::n_classes(Y);
 	MUs = new RowVectorXd[K];
 	sigmas = new MatrixXd[K];
 
-	MatrixXd* xs = new MatrixXd[K];
-	gnb::split_by_class(X, groups, xs);
-
+	vector<MatrixXd> xs = gnb::split_by_class(X, Y);
 	for (int i = 0; i < K; i++)
 	{
 		MUs[i] = stats::mean(xs[i], 1);
 		sigmas[i] = stats::cov(xs[i].transpose());
 	}
-
-	delete[] xs;
 }
 
-void gnb::to_groups(const VectorXd& vec, vector<vector<int>>& groups)
+int gnb::n_classes(const VectorXd& Y)
+// assuming a class vector has consecutive integers starting from zero
 {
-	for (int i = 0; i < vec.size(); i++)
-	{
-		if (vec[i] >= groups.size())
-			groups.push_back(vector<int>(1, i));
-		else
-			groups[vec[i]].push_back(i);
-	}
+	return *std::max_element(Y.data(), Y.data() + Y.size()) + 1;
 }
 
-void gnb::split_by_class(const MatrixXd& X, vector<vector<int>>& groups, MatrixXd*& xs)
+vector<MatrixXd> gnb::split_by_class(const MatrixXd& X, const VectorXd& Y)
 {
-	for (int i = 0; i < groups.size(); i++)
+	vector<vector<int>> groups = to_groups(Y);
+
+	vector<MatrixXd> splits;
+	for (const auto& group : groups)
 	{
-		MatrixXd temp(groups[i].size(), X.cols());
-		for (int j = 0; j < groups[i].size(); j++)
-			temp.row(j) = X.row(groups[i][j]);
-		xs[i] = temp;
+		MatrixXd split(group.size(), X.cols());
+		for (int i = 0; i < group.size(); i++)
+			split.row(i) = X.row(group[i]);
+		splits.push_back(split);
 	}
+	return splits;
+}
+
+vector<vector<int>> gnb::to_groups(const VectorXd& Y)
+{
+	vector<vector<int>> groups(n_classes(Y), vector<int>());
+	for (int i = 0; i < Y.size(); i++)
+		groups[Y[i]].push_back(i);
+	return groups;
 }
 
 VectorXd GaussianNB::predict(const MatrixXd& X)
@@ -87,7 +89,6 @@ VectorXd GaussianNB::predict(const MatrixXd& X)
 		vector<double> temp(K);
 		for (int j = 0; j < K; j++)
 			temp[j] = stats::multivariate_normal(X.row(i), MUs[j], sigmas[j]);
-
 		labels[i] = std::distance(temp.begin(), std::max_element(temp.begin(), temp.end()));
 	}
 	return labels;

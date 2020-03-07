@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <ctime>
 #include <Eigen/Dense>
 using namespace std;
 using namespace Eigen;
@@ -42,6 +43,8 @@ double evaluate_model(T& model, const MatrixXd& df, const VectorXd& labels, int 
 void split_to_folds(const MatrixXd& df, int n_fold, vector<vector<int>>& folds)
 // folds have n_fold vectors and each vector contains the indices of rows
 {
+	srand((unsigned)time(NULL));
+
 	folds.resize(n_fold, vector<int>());
 
 	vector<int> unique;
